@@ -20,12 +20,17 @@ $gasfqdn = (az network private-endpoint dns-zone-group list --endpoint-name $Env
 $gasIp = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[1].recordSets[1].ipAddresses[0] -o json).replace('.privatelink','').replace("`"","")
 $dpfqdn = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[2].recordSets[0].fqdn -o json).replace('.privatelink','').replace("`"","")
 $dpIp = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[2].recordSets[0].ipAddresses[0] -o json).replace('.privatelink','').replace("`"","")
+$monitorFqdn = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query "[?contains(privateDnsZoneConfigs[0].recordSets[0].fqdn, 'monitor.azure.com')].privateDnsZoneConfigs[0].recordSets[0].fqdn" -o tsv).replace("`"","")
+$monitorIp = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query "[?contains(privateDnsZoneConfigs[0].recordSets[0].fqdn, 'monitor.azure.com')].privateDnsZoneConfigs[0].recordSets[0].ipAddresses[0]" -o tsv).replace("`"","")
+
 $hostfile = Get-Content $file
 $hostfile += "$gisIP $gisfqdn"
 $hostfile += "$hisIP $hisfqdn"
 $hostfile += "$agentIP $agentfqdn"
 $hostfile += "$gasIP $gasfqdn"
 $hostfile += "$dpIP $dpfqdn"
+$hostfile += "$monitorIp $monitorFqdn"
+
 Set-Content -Path $file -Value $hostfile -Force
 
 
