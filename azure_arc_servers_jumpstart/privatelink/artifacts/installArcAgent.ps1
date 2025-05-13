@@ -7,31 +7,46 @@ az login --service-principal -u $Env:appId -p $Env:password --tenant $Env:tenant
 az account set -s $Env:SubscriptionId
 
 # Configure hosts file for Private link endpoints resolution
+Write-Host "`n🔧 Mise à jour du fichier hosts avec toutes les entrées Private DNS nécessaires à Azure Arc..."
 
 $file = "C:\Windows\System32\drivers\etc\hosts"
-
-$gisfqdn = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query '[0].privateDnsZoneConfigs[0].recordSets[0].fqdn' -o json).replace('.privatelink','').replace("`"","")
-$gisIP = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[0].recordSets[0].ipAddresses[0] -o json).replace("`"","")
-$hisfqdn = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[0].recordSets[1].fqdn -o json).replace('.privatelink','').replace("`"","")
-$hisIP = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[0].recordSets[1].ipAddresses[0] -o json).replace('.privatelink','').replace("`"","")
-$agentfqdn = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[1].recordSets[0].fqdn -o json).replace('.privatelink','').replace("`"","")
-$agentIp = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[1].recordSets[0].ipAddresses[0] -o json).replace('.privatelink','').replace("`"","")
-$gasfqdn = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[1].recordSets[1].fqdn -o json).replace('.privatelink','').replace("`"","")
-$gasIp = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[1].recordSets[1].ipAddresses[0] -o json).replace('.privatelink','').replace("`"","")
-$dpfqdn = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[2].recordSets[0].fqdn -o json).replace('.privatelink','').replace("`"","")
-$dpIp = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query [0].privateDnsZoneConfigs[2].recordSets[0].ipAddresses[0] -o json).replace('.privatelink','').replace("`"","")
-$monitorFqdn = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query "[?contains(privateDnsZoneConfigs[0].recordSets[0].fqdn, 'monitor.azure.com')].privateDnsZoneConfigs[0].recordSets[0].fqdn" -o tsv).replace("`"","")
-$monitorIp = (az network private-endpoint dns-zone-group list --endpoint-name $Env:PEname --resource-group $Env:resourceGroup -o json --query "[?contains(privateDnsZoneConfigs[0].recordSets[0].fqdn, 'monitor.azure.com')].privateDnsZoneConfigs[0].recordSets[0].ipAddresses[0]" -o tsv).replace("`"","")
-
 $hostfile = Get-Content $file
-$hostfile += "$gisIP $gisfqdn"
-$hostfile += "$hisIP $hisfqdn"
-$hostfile += "$agentIP $agentfqdn"
-$hostfile += "$gasIP $gasfqdn"
-$hostfile += "$dpIP $dpfqdn"
-$hostfile += "$monitorIp $monitorFqdn"
 
+# Liste des suffixes DNS utiles à injecter
+$dnsSuffixes = @(
+  "monitor.azure.com",
+  "guestconfiguration.azure.com",
+  "his.arc.azure.com",
+  "dp.kubernetesconfiguration.azure.com"
+)
+
+# Récupération complète des DNS zone groups du PE
+$dnsZoneGroups = az network private-endpoint dns-zone-group list `
+  --endpoint-name $Env:PEname `
+  --resource-group $Env:resourceGroup `
+  --output json | ConvertFrom-Json
+
+foreach ($zoneGroup in $dnsZoneGroups) {
+  foreach ($zone in $zoneGroup.privateDnsZoneConfigs) {
+    foreach ($record in $zone.recordSets) {
+      foreach ($suffix in $dnsSuffixes) {
+        if ($record.fqdn -like "*$suffix") {
+          $fqdn = $record.fqdn.Trim()
+          $ip = $record.ipAddresses[0]
+          if ($fqdn -and $ip -and -not ($hostfile -match $fqdn)) {
+            Write-Host "➕ Ajout : $ip $fqdn"
+            $hostfile += "$ip $fqdn"
+          }
+        }
+      }
+    }
+  }
+}
+
+# Enregistrement final dans le fichier hosts
 Set-Content -Path $file -Value $hostfile -Force
+
+
 
 
 ## Configure the OS to allow Azure Arc Agent to be deploy on an Azure VM
