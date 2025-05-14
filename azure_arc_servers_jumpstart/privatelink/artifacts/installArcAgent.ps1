@@ -2,18 +2,18 @@
 Start-Transcript -Path C:\Temp\ArcInstallScript.log
 
 # Azure Login 
+
 az login --service-principal -u $Env:appId -p $Env:password --tenant $Env:tenantId
 az account set -s $Env:SubscriptionId
 
 # Configure hosts file for Private link endpoints resolution
-# Configuration
+
 $file = "C:\Windows\System32\drivers\etc\hosts"
 $ArcPe = "Arc-PE"
 $ArcRG = "arc-azure-rg"
 $AMPLSPe = "ampls-pe"
 $AMPLSRG = "arc-azure-rg"
 
-# Récupération des enregistrements DNS - Arc PE
 try {
     $arcDnsData = az network private-endpoint dns-zone-group list `
         --endpoint-name $ArcPe `
@@ -35,10 +35,9 @@ try {
     $dpfqdn    = $arcDnsData[0].privateDnsZoneConfigs[2].recordSets[0].fqdn.Replace('.privatelink','')
     $dpIp      = $arcDnsData[0].privateDnsZoneConfigs[2].recordSets[0].ipAddresses[0]
 } catch {
-    Write-Host "❌ Erreur lors du traitement de $ArcPe : $_"
+    Write-Host "Error during integration ARC PE"
 }
 
-# Récupération des enregistrements DNS - AMPLS PE
 try {
     $amplsDnsData = az network private-endpoint dns-zone-group list `
         --endpoint-name $AMPLSPe `
@@ -78,10 +77,8 @@ try {
     $ampls9ip   = $records[9].ipAddresses[0]
 
 } catch {
-    Write-Host "❌ Erreur lors du traitement de $AMPLSPe : $_"
+    Write-Host "Error during integration AMPLS PE"
 }
-
-# Mise à jour du fichier hosts
 try {
     $hostfile = Get-Content $file
 
@@ -105,30 +102,31 @@ $hostfile += "$ampls8ip $ampls8fqdn"
 $hostfile += "$ampls9ip $ampls9fqdn"
 
     Set-Content -Path $file -Value $hostfile -Force
-    Write-Host "✅ Fichier hosts mis à jour."
+    Write-Host "File host update"
 } catch {
-    Write-Host "❌ Erreur lors de la mise à jour du fichier hosts : $_"
+    Write-Host "Error During integration Host"
 }
 
-# Préparer la VM
-Write-Host "🛠️ Configuration de la VM pour Azure Arc"
+
+## Configure the OS to allow Azure Arc Agent to be deploy on an Azure VM
+
+Write-Host "Configure the OS to allow Azure Arc connected machine agent to be deploy on an Azure VM"
 Set-Service WindowsAzureGuestAgent -StartupType Disabled -Verbose
 Stop-Service WindowsAzureGuestAgent -Force -Verbose
 New-NetFirewallRule -Name BlockAzureIMDS -DisplayName "Block access to Azure IMDS" -Enabled True -Profile Any -Direction Outbound -Action Block -RemoteAddress 169.254.169.254 
 
-# Télécharger l’agent Azure Arc
-Write-Host "📦 Téléchargement de l’agent Azure Arc"
-function download() {
-  $ProgressPreference = "SilentlyContinue"
-  Invoke-WebRequest -Uri https://aka.ms/AzureConnectedMachineAgent -OutFile AzureConnectedMachineAgent.msi
-}
+## Azure Arc agent Installation
+
+Write-Host "Onboarding to Azure Arc"
+# Download the package
+function download() {$ProgressPreference="SilentlyContinue"; Invoke-WebRequest -Uri https://aka.ms/AzureConnectedMachineAgent -OutFile AzureConnectedMachineAgent.msi}
 download
 
-# Installer l’agent
+
+# Install the package
 msiexec /i AzureConnectedMachineAgent.msi /l*v installationlog.txt /qn | Out-String
 
-# Connecter la machine à Azure Arc
-Write-Host "🔗 Connexion à Azure Arc"
+# Run connect command
 & "$Env:ProgramW6432\AzureConnectedMachineAgent\azcmagent.exe" connect `
 --resource-group $Env:resourceGroup `
 --tenant-id $Env:tenantId `
@@ -139,12 +137,8 @@ Write-Host "🔗 Connexion à Azure Arc"
 --service-principal-id $Env:appId `
 --service-principal-secret $Env:password `
 --correlation-id "e5089a61-0238-48fd-91ef-f67846168001" `
---tags "Project=jumpstart_azure_arc_servers"
+--tags "Project=jumpstart_azure_arc_servers" 
 
-# Nettoyage
-try {
-    Unregister-ScheduledTask -TaskName "LogonScript" -Confirm:$False -ErrorAction Stop
-    Write-Host "🧹 Tâche planifiée supprimée."
-} catch {
-    Write-Host "ℹ️ Tâche non trouvée ou déjà supprimée."
-}
+# Remove schedule task
+Unregister-ScheduledTask -TaskName "LogonScript" -Confirm:$False
+Stop-Process -Name powershell -Force
