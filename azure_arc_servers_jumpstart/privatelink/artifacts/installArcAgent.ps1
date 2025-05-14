@@ -6,43 +6,75 @@ az login --service-principal -u $Env:appId -p $Env:password --tenant $Env:tenant
 az account set -s $Env:SubscriptionId
 
 # Configure hosts file for Private link endpoints resolution
+# Configuration
 $file = "C:\Windows\System32\drivers\etc\hosts"
-$hostfile = Get-Content $file
+$ArcPe = "Arc-PE"
+$ArcRG = "arc-azure-rg"
+$AMPLSPe = "ampls-pe"
+$AMPLSRG = "arc-azure-rg"
 
-$privateEndpoints = @(
-    @{ name = $Env:PEname; label = "Arc-PE" },
-    @{ name = $Env:AMPLS_PEname; label = "AMPLS-PE" }
-)
+# Récupération des enregistrements DNS - Arc PE
+try {
+    $arcDnsData = az network private-endpoint dns-zone-group list `
+        --endpoint-name $ArcPe `
+        --resource-group $ArcRG `
+        -o json | ConvertFrom-Json
 
-foreach ($pe in $privateEndpoints) {
-    if (-not $pe.name) { continue }
+    $gisfqdn   = $arcDnsData[0].privateDnsZoneConfigs[0].recordSets[0].fqdn.Replace('.privatelink','')
+    $gisIP     = $arcDnsData[0].privateDnsZoneConfigs[0].recordSets[0].ipAddresses[0]
 
-    Write-Host "`n🔍 Traitement du Private Endpoint : $($pe.label)"
+    $hisfqdn   = $arcDnsData[0].privateDnsZoneConfigs[0].recordSets[1].fqdn.Replace('.privatelink','')
+    $hisIP     = $arcDnsData[0].privateDnsZoneConfigs[0].recordSets[1].ipAddresses[0]
 
-    try {
-        $dnsZoneGroups = az network private-endpoint dns-zone-group list `
-            --endpoint-name $pe.name `
-            --resource-group $Env:resourceGroup `
-            -o json | ConvertFrom-Json
+    $agentfqdn = $arcDnsData[0].privateDnsZoneConfigs[1].recordSets[0].fqdn.Replace('.privatelink','')
+    $agentIp   = $arcDnsData[0].privateDnsZoneConfigs[1].recordSets[0].ipAddresses[0]
 
-        foreach ($zone in $dnsZoneGroups[0].privateDnsZoneConfigs) {
-            foreach ($record in $zone.recordSets) {
-                $fqdn = $record.fqdn.Replace('.privatelink', '').Trim()
-                $ip = $record.ipAddresses[0]
+    $gasfqdn   = $arcDnsData[0].privateDnsZoneConfigs[1].recordSets[1].fqdn.Replace('.privatelink','')
+    $gasIp     = $arcDnsData[0].privateDnsZoneConfigs[1].recordSets[1].ipAddresses[0]
 
-                if ($fqdn -and $ip -and -not ($hostfile -match [regex]::Escape($fqdn))) {
-                    Write-Host "➕ Ajout : $ip $fqdn"
-                    $hostfile += "$ip $fqdn"
-                }
-            }
-        }
-    } catch {
-        Write-Host "⚠️ Erreur sur $($pe.label) : $_"
-    }
+    $dpfqdn    = $arcDnsData[0].privateDnsZoneConfigs[2].recordSets[0].fqdn.Replace('.privatelink','')
+    $dpIp      = $arcDnsData[0].privateDnsZoneConfigs[2].recordSets[0].ipAddresses[0]
+} catch {
+    Write-Host "❌ Erreur lors du traitement de $ArcPe : $_"
 }
 
-Set-Content -Path $file -Value $hostfile -Force
-Write-Host "✅ Fichier hosts mis à jour."
+# Récupération des enregistrements DNS - AMPLS PE
+try {
+    $amplsDnsData = az network private-endpoint dns-zone-group list `
+        --endpoint-name $AMPLSPe `
+        --resource-group $AMPLSRG `
+        -o json | ConvertFrom-Json
+
+    # Exemple avec les deux premiers enregistrements
+    $ampls1fqdn = $amplsDnsData[0].privateDnsZoneConfigs[0].recordSets[0].fqdn.Replace('.privatelink','')
+    $ampls1ip   = $amplsDnsData[0].privateDnsZoneConfigs[0].recordSets[0].ipAddresses[0]
+
+    $ampls2fqdn = $amplsDnsData[0].privateDnsZoneConfigs[0].recordSets[1].fqdn.Replace('.privatelink','')
+    $ampls2ip   = $amplsDnsData[0].privateDnsZoneConfigs[0].recordSets[1].ipAddresses[0]
+} catch {
+    Write-Host "❌ Erreur lors du traitement de $AMPLSPe : $_"
+}
+
+# Mise à jour du fichier hosts
+try {
+    $hostfile = Get-Content $file
+
+    # Arc PE
+    $hostfile += "$gisIP $gisfqdn"
+    $hostfile += "$hisIP $hisfqdn"
+    $hostfile += "$agentIp $agentfqdn"
+    $hostfile += "$gasIp $gasfqdn"
+    $hostfile += "$dpIp $dpfqdn"
+
+    # AMPLS PE
+    $hostfile += "$ampls1ip $ampls1fqdn"
+    $hostfile += "$ampls2ip $ampls2fqdn"
+
+    Set-Content -Path $file -Value $hostfile -Force
+    Write-Host "✅ Fichier hosts mis à jour."
+} catch {
+    Write-Host "❌ Erreur lors de la mise à jour du fichier hosts : $_"
+}
 
 # Préparer la VM
 Write-Host "🛠️ Configuration de la VM pour Azure Arc"
