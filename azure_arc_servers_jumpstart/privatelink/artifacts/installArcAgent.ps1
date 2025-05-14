@@ -45,12 +45,38 @@ try {
         --resource-group $AMPLSRG `
         -o json | ConvertFrom-Json
 
-    # Exemple avec les deux premiers enregistrements
-    $ampls1fqdn = $amplsDnsData[0].privateDnsZoneConfigs[0].recordSets[0].fqdn.Replace('.privatelink','')
-    $ampls1ip   = $amplsDnsData[0].privateDnsZoneConfigs[0].recordSets[0].ipAddresses[0]
+    $records = $amplsDnsData[0].privateDnsZoneConfigs[0].recordSets
 
-    $ampls2fqdn = $amplsDnsData[0].privateDnsZoneConfigs[0].recordSets[1].fqdn.Replace('.privatelink','')
-    $ampls2ip   = $amplsDnsData[0].privateDnsZoneConfigs[0].recordSets[1].ipAddresses[0]
+    $ampls0fqdn = $records[0].fqdn.Replace('.privatelink','')
+    $ampls0ip   = $records[0].ipAddresses[0]
+
+    $ampls1fqdn = $records[1].fqdn.Replace('.privatelink','')
+    $ampls1ip   = $records[1].ipAddresses[0]
+
+    $ampls2fqdn = $records[2].fqdn.Replace('.privatelink','')
+    $ampls2ip   = $records[2].ipAddresses[0]
+
+    $ampls3fqdn = $records[3].fqdn.Replace('.privatelink','')
+    $ampls3ip   = $records[3].ipAddresses[0]
+
+    $ampls4fqdn = $records[4].fqdn.Replace('.privatelink','')
+    $ampls4ip   = $records[4].ipAddresses[0]
+
+    $ampls5fqdn = $records[5].fqdn.Replace('.privatelink','')
+    $ampls5ip   = $records[5].ipAddresses[0]
+
+    $ampls6fqdn = $records[6].fqdn.Replace('.privatelink','')
+    $ampls6ip   = $records[6].ipAddresses[0]
+
+    $ampls7fqdn = $records[7].fqdn.Replace('.privatelink','')
+    $ampls7ip   = $records[7].ipAddresses[0]
+
+    $ampls8fqdn = $records[8].fqdn.Replace('.privatelink','')
+    $ampls8ip   = $records[8].ipAddresses[0]
+
+    $ampls9fqdn = $records[9].fqdn.Replace('.privatelink','')
+    $ampls9ip   = $records[9].ipAddresses[0]
+
 } catch {
     Write-Host "❌ Erreur lors du traitement de $AMPLSPe : $_"
 }
@@ -67,8 +93,16 @@ try {
     $hostfile += "$dpIp $dpfqdn"
 
     # AMPLS PE
-    $hostfile += "$ampls1ip $ampls1fqdn"
-    $hostfile += "$ampls2ip $ampls2fqdn"
+$hostfile += "$ampls0ip $ampls0fqdn"
+$hostfile += "$ampls1ip $ampls1fqdn"
+$hostfile += "$ampls2ip $ampls2fqdn"
+$hostfile += "$ampls3ip $ampls3fqdn"
+$hostfile += "$ampls4ip $ampls4fqdn"
+$hostfile += "$ampls5ip $ampls5fqdn"
+$hostfile += "$ampls6ip $ampls6fqdn"
+$hostfile += "$ampls7ip $ampls7fqdn"
+$hostfile += "$ampls8ip $ampls8fqdn"
+$hostfile += "$ampls9ip $ampls9fqdn"
 
     Set-Content -Path $file -Value $hostfile -Force
     Write-Host "✅ Fichier hosts mis à jour."
@@ -114,5 +148,3 @@ try {
 } catch {
     Write-Host "ℹ️ Tâche non trouvée ou déjà supprimée."
 }
-
-Stop-Process -Name powershell -Force
